@@ -1,0 +1,191 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  WAITER
+  CASHIER
+  KITCHEN
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  BILLING
+  CLEANING
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  READY
+  SERVED
+  HOLD
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+}
+
+model Role {
+  id          String  @id @default(cuid())
+  name        UserRole @unique
+  description String?
+  users       User[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  orders       Order[]  @relation("OrderCreatedBy")
+  payments     Payment[]
+}
+
+model Floor {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tables    Table[]
+}
+
+model Table {
+  id        String      @id @default(cuid())
+  floorId   String
+  floor     Floor       @relation(fields: [floorId], references: [id])
+  name      String
+  seats     Int
+  x         Float       @default(0)
+  y         Float       @default(0)
+  status    TableStatus @default(AVAILABLE)
+  mergedIntoTableId String?
+  mergedIntoTable   Table?  @relation("MergedTable", fields: [mergedIntoTableId], references: [id])
+  mergedTables      Table[] @relation("MergedTable")
+  orders    Order[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([floorId, name])
+}
+
+model MenuCategory {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     MenuItem[]
+}
+
+model MenuItem {
+  id            String   @id @default(cuid())
+  categoryId    String
+  category      MenuCategory @relation(fields: [categoryId], references: [id])
+  name          String
+  description   String?
+  basePrice     Decimal  @db.Decimal(10, 2)
+  isAvailable   Boolean  @default(true)
+  stockQuantity Int      @default(0)
+  variants      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  modifiers     Modifier[]
+  orderItems    OrderItem[]
+}
+
+model Modifier {
+  id          String   @id @default(cuid())
+  menuItemId  String
+  menuItem    MenuItem @relation(fields: [menuItemId], references: [id])
+  name        String
+  priceDelta  Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  tableId          String
+  table            Table       @relation(fields: [tableId], references: [id])
+  createdById      String
+  createdBy        User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  status           OrderStatus @default(PENDING)
+  notes            String?
+  splitGroupId     String?
+  hold             Boolean     @default(false)
+  cancelReason     String?
+  subtotal         Decimal     @db.Decimal(10, 2)
+  discountAmount   Decimal     @default(0) @db.Decimal(10, 2)
+  taxAmount        Decimal     @default(0) @db.Decimal(10, 2)
+  tipAmount        Decimal     @default(0) @db.Decimal(10, 2)
+  totalAmount      Decimal     @db.Decimal(10, 2)
+  openedAt         DateTime    @default(now())
+  closedAt         DateTime?
+  updatedAt        DateTime    @updatedAt
+  orderItems       OrderItem[]
+  payments         Payment[]
+}
+
+model OrderItem {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id])
+  menuItemId   String
+  menuItem     MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity     Int
+  unitPrice    Decimal  @db.Decimal(10, 2)
+  modifiers    Json?
+  notes        String?
+  sentToKitchenAt DateTime?
+  createdAt    DateTime @default(now())
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id])
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  method         PaymentMethod
+  amount         Decimal  @db.Decimal(10, 2)
+  tipAmount      Decimal  @default(0) @db.Decimal(10, 2)
+  reference      String?
+  createdAt      DateTime @default(now())
+}
+
+model Inventory {
+  id            String   @id @default(cuid())
+  ingredient    String   @unique
+  unit          String
+  inStock       Decimal  @db.Decimal(10, 2)
+  reorderLevel  Decimal  @db.Decimal(10, 2)
+  updatedAt     DateTime @updatedAt
+}
+
+model SyncLog {
+  id             String   @id @default(cuid())
+  clientRecordId String
+  entity         String
+  action         String
+  lastSyncedAt   DateTime
+  serverVersion  DateTime @default(now())
+  conflict       Boolean  @default(false)
+  metadata       Json?
+
+  @@index([clientRecordId, entity])
+}
