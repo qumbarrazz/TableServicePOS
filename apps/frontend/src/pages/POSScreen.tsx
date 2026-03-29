@@ -11,10 +11,10 @@ export function POSScreen() {
       .then(async (floors) => {
         const flatten = floors.flatMap((f) => f.tables);
         setTables(flatten);
-        await db.tables.bulkPut(flatten);
+        await db.diningTables.bulkPut(flatten);
       })
       .catch(async () => {
-        setTables(await db.tables.toArray());
+        setTables(await db.diningTables.toArray());
       });
   }, [setTables]);
 
